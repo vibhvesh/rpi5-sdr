@@ -150,3 +150,16 @@ The app has no custom shortcuts. Use standard controls: Tab/Shift+Tab to move, E
 Receiving radio is regulated differently in each country. Listening to airband, police, cellular, or private communications, or sharing what you hear, may be restricted (for example, in India by the Indian Telegraph Act and Wireless Telegraphy Act, and WPC rules). Check local law before use. This software only receives.
 
 See [INSTALL.md](INSTALL.md) for installation.
+
+## 14. Web dashboard (view from another PC on the LAN)
+Open **http://<pi-ip>:8080** in any browser on the same network. The exact URL is shown on the desktop **Home** tab ("Web dashboard") and at the end of `install.sh`; or run `hostname -I` on the Pi.
+
+The page shows: device/Home info (status, name, tuner, serial, frequency, sample rate, gain, PPM, bias-tee, Pi temp, CPU load), a live spectrum + waterfall (~8 fps), frequency entry + **Tune**, **Presets**, **Gain**, **Sample rate**, **PPM**, and **Run Doctor report** (same checks as the Troubleshoot tab, read-only).
+
+**Who owns the dongle?** Only one program can use the RTL-SDR. Rules:
+1. The **desktop app has priority.** While it is open it holds a lock (`/tmp/rpi5-sdr-desktop.lock`); the web service releases the dongle within ~0.5 s and the page shows **"Dongle in use by desktop app (close it to stream here)"** — info (temp, CPU, settings) still updates.
+2. With the desktop app closed, the web service opens the dongle **only while a browser page is connected**, and releases it when the last page closes.
+3. Settings changed on the web page are saved to the same `~/.config/rpi5-sdr/config.json`.
+Listening to audio is only available in the desktop app.
+
+The web page has **no password**; use it only on a trusted home network. Do not port-forward 8080 on your router.

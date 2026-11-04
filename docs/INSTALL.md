@@ -95,3 +95,16 @@ sudo rm -f /etc/modprobe.d/blacklist-rtlsdr.conf /etc/udev/rules.d/rtl-sdr.rules
 Diagnose anything with `rpi5-sdr-doctor` (GUI) or `rpi5-sdr-doctor --cli` (saves `~/rpi5-sdr-report.txt`).
 
 See [USER_MANUAL.md](USER_MANUAL.md) for using the app.
+
+## 10. Web dashboard service
+`install.sh` installs `aiohttp` and a systemd service **rpi5-sdr-web** (runs as your user, port **8080** on all interfaces) and enables it. Open `http://<pi-ip>:8080` from another PC (URL printed at the end of install and shown on the Home tab).
+```bash
+systemctl status rpi5-sdr-web            # status
+journalctl -u rpi5-sdr-web -f            # logs
+sudo systemctl disable --now rpi5-sdr-web   # turn off
+sudo systemctl enable --now rpi5-sdr-web    # turn on
+RPI5SDR_NO_WEB=1 sudo -E bash install.sh    # install/update without the web service
+rpi5-sdr-web --port 8081                    # run manually on another port (stop the service first)
+```
+**Firewall:** Raspberry Pi OS has no firewall by default. If you enabled `ufw`, the installer runs `ufw allow 8080/tcp`; for other firewalls open TCP 8080 for your LAN only. No authentication — LAN use only, never expose to the internet.
+Uninstall: `sudo systemctl disable --now rpi5-sdr-web && sudo rm /etc/systemd/system/rpi5-sdr-web.service /usr/local/bin/rpi5-sdr-web`.

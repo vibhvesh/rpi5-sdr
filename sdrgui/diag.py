@@ -29,9 +29,19 @@ def explain_open_error(err, exclude=()):
     if d: msgs.append(f"DVB kernel driver loaded ({', '.join(d)}): run 'sudo modprobe -r {' '.join(d)}' or reboot (blacklist).")
     b = busy_procs(exclude)
     if b: msgs.append("Device busy: used by " + ", ".join(f"{n} (PID {p})" for p, n in b) + ". Stop it or use Troubleshoot tab.")
+    if not msgs and web_running():
+        msgs.append("Web service rpi5-sdr-web may hold the dongle; it releases it within ~1 s (press Re-scan) or: sudo systemctl stop rpi5-sdr-web.")
     if not msgs:
         rc, o = run(["lsusb"])
         if "0bda:283" not in o: msgs.append("RTL-SDR not found on USB. Check cable/port/power.")
         elif "LIBUSB_ERROR_ACCESS" in err or "ccess" in err: msgs.append("Permission denied: check udev rule / plugdev group, reboot.")
         else: msgs.append(f"Could not open SDR ({err}). Try replugging or Re-scan.")
     return " ".join(msgs)
+
+def web_running():
+    for p in os.listdir("/proc"):
+        if p.isdigit() and int(p) != os.getpid():
+            try:
+                if b"web.py" in open(f"/proc/{p}/cmdline", "rb").read(): return True
+            except Exception: pass
+    return False

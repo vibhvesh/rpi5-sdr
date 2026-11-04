@@ -1,7 +1,7 @@
 # RPi5 RTL-SDR GUI (RTL-SDR Blog V3)
 Simple touchscreen-friendly SDR manager for Raspberry Pi 5 (Raspberry Pi OS Bookworm 64-bit) + RTL-SDR Blog V3 (RTL2832U + R820T2).
 
-🩺 **Troubleshoot:** `rpi5-sdr-doctor` (or `--cli`) · 📘 **Docs:** [Installation Guide](docs/INSTALL.md) · [User Manual](docs/USER_MANUAL.md)
+🌐 **Web dashboard:** `http://<pi-ip>:8080` from any PC on your LAN (service `rpi5-sdr-web`; desktop app has priority on the dongle) · 🩺 **Troubleshoot:** `rpi5-sdr-doctor` (or `--cli`) · 📘 **Docs:** [Installation Guide](docs/INSTALL.md) · [User Manual](docs/USER_MANUAL.md)
 
 Tabs: **Home** (device/tuner/serial, sample rate, freq, gain, PPM, bias-tee, Pi temp, CPU load, re-scan) · **Spectrum** (spectrum + waterfall, tune, presets: FM 88-108, ADS-B 1090, NOAA 137, Airband 118-137, 433 ISM, WBFM/NFM/AM listen via `rtl_fm | aplay`) · **Troubleshoot** (pass/fail checks with fix buttons) · **Settings** (sample rate, R820T2 gain list/auto, PPM, direct sampling Q-branch, bias tee via `rtl_biast`, offset tuning) saved to `~/.config/rpi5-sdr/config.json`.
 
@@ -38,3 +38,6 @@ git clone https://github.com/vibhvesh/rpi5-sdr.git rpi5-sdr && cd rpi5-sdr && su
 - *rtl_biast not found*: re-run install.sh (built from rtlsdrblog source).
 - *LIBUSB_ERROR_IO / Could not open SDR*: the app retries and explains the cause (DVB driver loaded, device busy with PID, not on USB). Use the Troubleshoot tab.
 - Exit `--kiosk` mode: Alt+F4; disable autostart: `rm ~/.config/autostart/rpi5-sdr.desktop`.
+
+## Web dashboard
+`http://<pi-ip>:8080` — live spectrum/waterfall, tune, presets, gain/sample rate/PPM, Home info and Doctor report. Runs as systemd service `rpi5-sdr-web` (disable: `sudo systemctl disable --now rpi5-sdr-web`). Only one program can own the dongle: while the desktop app is open the web page shows "Dongle in use by desktop app" (info still updates); otherwise the web service opens the dongle only while a page is connected. No password — LAN only; if `ufw` is active the installer opens 8080/tcp. Details: [User Manual §14](docs/USER_MANUAL.md#14-web-dashboard-view-from-another-pc-on-the-lan), [Install §10](docs/INSTALL.md#10-web-dashboard-service).

@@ -73,7 +73,11 @@ cat > /usr/local/bin/rpi5-sdr-doctor <<EOT
 #!/bin/sh
 cd "$DIR" && exec "$DIR/venv/bin/python" doctor.py "\$@"
 EOT
-chmod +x /usr/local/bin/rpi5-sdr /usr/local/bin/rpi5-sdr-doctor
+cat > /usr/local/bin/rpi5-sdr-web <<EOT
+#!/bin/sh
+cd "$DIR" && exec "$DIR/venv/bin/python" web.py "\$@"
+EOT
+chmod +x /usr/local/bin/rpi5-sdr /usr/local/bin/rpi5-sdr-doctor /usr/local/bin/rpi5-sdr-web
 A="$H/.config/autostart"; M="$H/.local/share/applications"; mkdir -p "$A" "$M"
 de(){ printf '[Desktop Entry]\nType=Application\nName=%s\nExec=%s\nIcon=%s\nCategories=HamRadio;Utility;\nTerminal=false\nX-GNOME-Autostart-enabled=true\n' "$1" "$2" "$3"; }
 de "RPi5 SDR" /usr/local/bin/rpi5-sdr network-wireless > "$A/rpi5-sdr.desktop"
@@ -81,6 +85,31 @@ de "RPi5 SDR" /usr/local/bin/rpi5-sdr network-wireless > "$M/rpi5-sdr.desktop"
 de "RPi5 SDR Doctor" /usr/local/bin/rpi5-sdr-doctor utilities-system-monitor > "$M/rpi5-sdr-doctor.desktop"
 chown -R "$U:$U" "$H/.config" "$H/.local"
 raspi-config nonint do_boot_behaviour B4 >>"$LOG" 2>&1 || true
+
+say "Web dashboard service (rpi5-sdr-web, port 8080)"
+cat > /etc/systemd/system/rpi5-sdr-web.service <<EOT
+[Unit]
+Description=RPi5 RTL-SDR web dashboard (port 8080)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=$U
+Group=$U
+SupplementaryGroups=plugdev
+WorkingDirectory=$DIR
+Environment=HOME=$H
+ExecStart=$DIR/venv/bin/python $DIR/web.py --host 0.0.0.0 --port 8080
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOT
+systemctl daemon-reload
+if [ "${RPI5SDR_NO_WEB:-0}" = 1 ]; then systemctl disable --now rpi5-sdr-web >>"$LOG" 2>&1 || true; echo "  web service disabled (RPI5SDR_NO_WEB=1)"
+else systemctl enable rpi5-sdr-web >>"$LOG" 2>&1 && systemctl restart rpi5-sdr-web || echo "  [WARN] web service failed to start: journalctl -u rpi5-sdr-web"; fi
+if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then ufw allow 8080/tcp >>"$LOG" 2>&1 && echo "  ufw: allowed 8080/tcp"; fi
 
 say "Self-check"
 ck(){ if eval "$2" >/dev/null 2>&1; then echo "  [OK]   $1"; else echo "  [FAIL] $1"; fi; }
@@ -95,5 +124,9 @@ ck "dongle on USB"       "lsusb | grep -q 0bda:283"
 ck "pactl"               "command -v pactl"
 ck "python deps"         "$DIR/venv/bin/python -c 'import PyQt5, pyqtgraph, numpy, rtlsdr'"
 ck "bluetooth service"   "systemctl is-active bluetooth"
+ck "web service running" "systemctl is-active rpi5-sdr-web"
+ck "web port 8080"       "sleep 2; curl -fs -o /dev/null http://127.0.0.1:8080/ || python3 -c 'import urllib.request;urllib.request.urlopen(\"http://127.0.0.1:8080/\")'"
 [ ${#SKIPPED[@]} -eq 0 ] || echo "  Skipped optional: ${SKIPPED[*]}"
+IPS=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v ':' | grep . | sed 's#.*#http://&:8080#' | tr '\n' ' ')
+echo -e "\nWeb dashboard: ${IPS:-http://<pi-ip>:8080}  (disable: sudo systemctl disable --now rpi5-sdr-web)"
 echo -e "\nDone. Log: $LOG\nReboot: sudo reboot. App opens in a half-screen window. Troubleshoot: rpi5-sdr-doctor (or --cli)."

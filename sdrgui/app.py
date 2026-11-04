@@ -1,12 +1,13 @@
 import sys, os, numpy as np
 from PyQt5 import QtWidgets, QtCore
 import pyqtgraph as pg
-from . import config, device, audio
+from . import config, device, audio, lock
 from .troubleshoot.gui import Doctor
 
 class Main(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle("RPi5 RTL-SDR")
+        lock.acquire_desktop(); self.web_url = lock.web_url()
         self.cfg = config.load(); self.dev = device.Device(); self.player = audio.Player()
         self.tabs = QtWidgets.QTabWidget(); self.setCentralWidget(self.tabs)
         self._home(); self._spectrum(); self._settings()
@@ -19,7 +20,7 @@ class Main(QtWidgets.QMainWindow):
     def _home(self):
         w = QtWidgets.QWidget(); f = QtWidgets.QFormLayout(w); self.lbl = {}
         for k in ["Device", "Name", "Tuner", "Serial", "Sample rate", "Center freq", "Gain", "PPM",
-                  "Direct sampling", "Bias-tee", "Pi temperature", "CPU load", "Status"]:
+                  "Direct sampling", "Bias-tee", "Pi temperature", "CPU load", "Web dashboard", "Status"]:
             self.lbl[k] = QtWidgets.QLabel("-"); f.addRow(f"<b>{k}</b>", self.lbl[k])
         b = QtWidgets.QPushButton("Re-scan dongle", clicked=self.rescan); f.addRow(b)
         f.addRow(QtWidgets.QPushButton("Troubleshoot...", clicked=lambda: (self.tabs.setCurrentWidget(self.doctor), self.doctor.refresh())))
@@ -126,7 +127,7 @@ class Main(QtWidgets.QMainWindow):
                 "Serial": i["serial"], "Sample rate": f"{c['sample_rate']/1e6:.3f} MSPS", "Center freq": f"{c['center_freq']/1e6:.4f} MHz",
                 "Gain": f"{c['gain']}", "PPM": str(c["ppm"]), "Direct sampling": ["Off", "I", "Q"][int(c["direct_sampling"])],
                 "Bias-tee": "ON" if c["bias_tee"] else "OFF", "Pi temperature": f"{t:.1f} °C" if t else "n/a",
-                "CPU load": f"{load:.0f} %" if load is not None else "n/a"}
+                "CPU load": f"{load:.0f} %" if load is not None else "n/a", "Web dashboard": self.web_url}
         for k, v in vals.items(): self.lbl[k].setText(v)
         if not i["detected"]: self.lbl["Status"].setText(self.dev.error or "Plug in RTL-SDR and press Re-scan")
     def closeEvent(self, e): self.player.stop(); self.dev.close(); e.accept()
