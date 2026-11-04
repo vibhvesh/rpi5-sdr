@@ -1,6 +1,8 @@
 # RPi5 RTL-SDR GUI (RTL-SDR Blog V3)
 Simple touchscreen-friendly SDR manager for Raspberry Pi 5 (Raspberry Pi OS Bookworm 64-bit) + RTL-SDR Blog V3 (RTL2832U + R820T2).
 
+📘 **Docs:** [Installation Guide](docs/INSTALL.md) · [User Manual](docs/USER_MANUAL.md)
+
 Tabs: **Home** (device/tuner/serial, sample rate, freq, gain, PPM, bias-tee, Pi temp, CPU load, re-scan) · **Spectrum** (spectrum + waterfall, tune, presets: FM 88-108, ADS-B 1090, NOAA 137, Airband 118-137, 433 ISM, WBFM/NFM/AM listen via `rtl_fm | aplay`) · **Settings** (sample rate, R820T2 gain list/auto, PPM, direct sampling Q-branch, bias tee via `rtl_biast`, offset tuning) saved to `~/.config/rpi5-sdr/config.json`.
 
 ## Install
