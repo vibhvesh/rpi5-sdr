@@ -1,0 +1,3 @@
+pyrtlsdr<0.3
+numpy
+pyqtgraph
