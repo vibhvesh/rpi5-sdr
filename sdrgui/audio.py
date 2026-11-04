@@ -10,7 +10,7 @@ def build_cmd(cfg, mode):
     if cfg["direct_sampling"]: a += ["-E", "direct"]
     if cfg["bias_tee"]: a += ["-T"]
     rate = "48000" if mode == "wbfm" else "24000"
-    return a + ["-"], ["aplay", "-q", "-D", cfg.get("audio_device", "default"), "-r", rate, "-f", "S16_LE", "-t", "raw", "-c", "1"]
+    return a + ["-"], ["aplay", "-q", "-D", ("pulse" if cfg.get("audio_device", "pulse") == "default" else cfg.get("audio_device", "pulse")), "-r", rate, "-f", "S16_LE", "-t", "raw", "-c", "1"]
 class Player:
     def __init__(self): self.p1 = self.p2 = None
     def start(self, cfg, mode):
