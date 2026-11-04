@@ -24,20 +24,22 @@ Plug in the RTL-SDR (optional at this stage), open a terminal, then:
 ```bash
 git clone https://github.com/vibhvesh/rpi5-sdr.git rpi5-sdr
 cd rpi5-sdr
-sudo ./install.sh
+sudo bash install.sh
 sudo reboot
 ```
-Run `install.sh` with `sudo` from your normal user account (not a root login): it uses `$SUDO_USER` to set up the app for you. Takes roughly 5–10 minutes.
+Run `install.sh` with `sudo` from your normal user account (not a root login): it uses `$SUDO_USER` to set up the app for you. Takes roughly 10–20 minutes (many packages). Safe to re-run any time. At the end it prints a **Self-check** list ([OK]/[FAIL]) and any skipped optional packages; full log: `/var/log/rpi5-sdr-install.log`.
 
 ## 4. What install.sh does
-1. `apt-get install` git, cmake, build tools, libusb, `python3-pyqt5`, `python3-numpy`, `python3-venv`, pip, `alsa-utils`, `usbutils`.
+1. **Required** apt packages (install stops if any fail): git, cmake, build-essential, pkg-config, libusb-1.0-0-dev, python3-pyqt5, python3-numpy, python3-venv, python3-pip, alsa-utils, usbutils, pipewire, pipewire-pulse, pipewire-alsa, wireplumber, pulseaudio-utils (pactl), policykit-1 (pkexec).
+   **Optional** (logged and skipped if unavailable): libspa-0.2-bluetooth, pavucontrol, bluez, bluez-tools, blueman, sox, libsox-fmt-all, multimon-ng, rtl-433, gqrx-sdr, python3-pyqtgraph, libraspberrypi-bin, and dump1090-fa or dump1090-mutability (their services are disabled so they don't grab the dongle).
+   Also enables the bluetooth service and the PipeWire user services (pipewire, pipewire-pulse, wireplumber) for your user.
 2. Purges distro `librtlsdr*` / `rtl-sdr` packages to avoid conflicts.
-3. Clones and builds **github.com/rtlsdrblog/rtl-sdr-blog** (with udev rules and kernel-driver detach), installs to `/usr/local` (`rtl_test`, `rtl_fm`, `rtl_biast`, …), runs `ldconfig`.
+3. Clones (or updates) to `/usr/local/src/rtl-sdr-blog` and builds **github.com/rtlsdrblog/rtl-sdr-blog** (with udev rules and kernel-driver detach), installs to `/usr/local` (`rtl_test`, `rtl_fm`, `rtl_biast`, …), runs `ldconfig`.
 4. Writes `/etc/modprobe.d/blacklist-rtlsdr.conf` blacklisting `dvb_usb_rtl28xxu`, `rtl2832`, `rtl2830`, and unloads the DVB driver.
-5. Reloads udev; adds your user to `plugdev` and `audio`.
+5. Reloads udev; adds your user to `plugdev`, `audio`, `bluetooth`.
 6. Creates a Python venv at `rpi5-sdr/venv` (with system site-packages) and installs `requirements.txt` (pyrtlsdr <0.3, numpy, pyqtgraph).
 7. Creates launcher `/usr/local/bin/rpi5-sdr`.
-8. Creates `~/.config/autostart/rpi5-sdr.desktop` (runs `rpi5-sdr --kiosk`) and a menu entry `~/.local/share/applications/rpi5-sdr.desktop` (windowed).
+8. Creates `/usr/local/bin/rpi5-sdr-doctor`, autostart `~/.config/autostart/rpi5-sdr.desktop` (runs `rpi5-sdr`, half-screen window), and menu entries "RPi5 SDR" and "RPi5 SDR Doctor".
 9. Sets boot to desktop with autologin (`raspi-config nonint do_boot_behaviour B4`).
 
 > Don't move or delete the cloned folder after installing — the launcher points to it.
@@ -52,21 +54,20 @@ lsmod | grep dvb_usb_rtl28xxu   # should print nothing
 Then start the app: `rpi5-sdr` (windowed) or test without hardware: `RPI5SDR_MOCK=1 rpi5-sdr`.
 
 ## 6. Autostart
-After reboot the Pi logs in to the desktop and the app opens full-screen. Exit with **Alt+F4**.
+After reboot the Pi logs in to the desktop and the app opens as a normal window on the **left half of the screen** (full height), which you can move/resize. Full-screen is optional: `rpi5-sdr --kiosk` (exit with Alt+F4).
 - Disable: `rm ~/.config/autostart/rpi5-sdr.desktop`
-- Re-enable: re-run `sudo ./install.sh`, or recreate the file with `Exec=/usr/local/bin/rpi5-sdr --kiosk`.
+- Re-enable: re-run `sudo ./install.sh`, or recreate the file with `Exec=/usr/local/bin/rpi5-sdr`.
 
 ## 7. Update
 ```bash
-cd ~/rpi5-sdr && git pull
-sudo ./install.sh     # only needed if install.sh or requirements.txt changed
+cd ~/rpi5-sdr && git pull && sudo bash install.sh
 ```
 Your settings in `~/.config/rpi5-sdr/config.json` are kept.
 
 ## 8. Uninstall
 ```bash
 rm -f ~/.config/autostart/rpi5-sdr.desktop ~/.local/share/applications/rpi5-sdr.desktop
-sudo rm -f /usr/local/bin/rpi5-sdr
+sudo rm -f /usr/local/bin/rpi5-sdr /usr/local/bin/rpi5-sdr-doctor ~/.local/share/applications/rpi5-sdr-doctor.desktop
 rm -rf ~/rpi5-sdr ~/.config/rpi5-sdr
 # optional: remove drivers and blacklist
 cd /tmp && git clone --depth 1 https://github.com/rtlsdrblog/rtl-sdr-blog && cd rtl-sdr-blog && mkdir build && cd build && cmake .. && sudo xargs rm -f < install_manifest.txt 2>/dev/null || sudo rm -f /usr/local/bin/rtl_* /usr/local/lib/librtlsdr*
@@ -78,8 +79,10 @@ sudo rm -f /etc/modprobe.d/blacklist-rtlsdr.conf /etc/udev/rules.d/rtl-sdr.rules
 ## 9. Troubleshooting install
 | Problem | Fix |
 |---|---|
-| `Run with sudo` | Use `sudo ./install.sh` |
-| `Permission denied: ./install.sh` | `chmod +x install.sh` |
+| `run with sudo` | Use `sudo bash install.sh` |
+| Self-check shows [FAIL] | Run `rpi5-sdr-doctor --cli`, check `/var/log/rpi5-sdr-install.log` |
+| `pactl: command not found` | Re-run installer (installs pulseaudio-utils + PipeWire) |
+| `Permission denied: ./install.sh` | Use `sudo bash install.sh` |
 | apt/git errors | Check internet, `sudo apt update`, retry |
 | cmake/make error | `sudo apt install -y cmake build-essential libusb-1.0-0-dev pkg-config`, retry |
 | pip error installing pyrtlsdr | `~/rpi5-sdr/venv/bin/pip install "pyrtlsdr<0.3"` |
@@ -88,5 +91,7 @@ sudo rm -f /etc/modprobe.d/blacklist-rtlsdr.conf /etc/udev/rules.d/rtl-sdr.rules
 | Permission error opening device | Reboot (group `plugdev` membership applies after re-login) |
 | App doesn't autostart | Check `~/.config/autostart/rpi5-sdr.desktop` exists; run `rpi5-sdr` in a terminal to see errors |
 | `qt.qpa.plugin` / display error | Must run from the desktop session, not plain SSH (or use `ssh -X`) |
+
+Diagnose anything with `rpi5-sdr-doctor` (GUI) or `rpi5-sdr-doctor --cli` (saves `~/rpi5-sdr-report.txt`).
 
 See [USER_MANUAL.md](USER_MANUAL.md) for using the app.

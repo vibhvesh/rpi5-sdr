@@ -1,5 +1,6 @@
 """SDR device wrapper with graceful fallback and mock mode (RPI5SDR_MOCK=1)."""
-import os, subprocess, shutil, numpy as np
+import os, subprocess, shutil, time, numpy as np
+from . import diag
 try:
     from rtlsdr import RtlSdr
 except Exception:
@@ -33,8 +34,20 @@ class Device:
             return True
         if RtlSdr is None:
             self.error = "pyrtlsdr not installed"; return False
+        last = ""
+        for attempt in range(4):
+            try:
+                self.sdr = RtlSdr(); break
+            except Exception as e:
+                last = str(e); self.sdr = None
+                if diag.dvb_loaded() or diag.busy_procs(): break
+                time.sleep(0.7)
+        if self.sdr is None:
+            self.error = diag.explain_open_error(last)
+            self.info = {"detected": False, "name": usb_info() or "Not found", "tuner": "-", "serial": "-"}
+            return False
         try:
-            self.sdr = RtlSdr(); self.apply(cfg)
+            self.apply(cfg)
             ser = "-"
             try: ser = RtlSdr.get_device_serial_addresses()[0]
             except Exception: pass
@@ -46,7 +59,7 @@ class Device:
             self.info = {"detected": True, "name": usb_info() or "RTL2832U", "tuner": tuner, "serial": ser}
             return True
         except Exception as e:
-            self.sdr = None; self.error = str(e)
+            self.close(); self.error = diag.explain_open_error(str(e))
             self.info = {"detected": False, "name": usb_info() or "Not found", "tuner": "-", "serial": "-"}
             return False
     def apply(self, cfg):
@@ -73,6 +86,7 @@ class Device:
             try: self.sdr.close()
             except Exception: pass
         self.sdr = None
+        time.sleep(0.3)  # let libusb fully release before rtl_fm opens it
 
 def set_bias_tee(on):
     exe = shutil.which("rtl_biast")

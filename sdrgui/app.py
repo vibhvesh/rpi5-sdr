@@ -2,6 +2,7 @@ import sys, os, numpy as np
 from PyQt5 import QtWidgets, QtCore
 import pyqtgraph as pg
 from . import config, device, audio
+from .troubleshoot.gui import Doctor
 
 class Main(QtWidgets.QMainWindow):
     def __init__(self):
@@ -9,6 +10,7 @@ class Main(QtWidgets.QMainWindow):
         self.cfg = config.load(); self.dev = device.Device(); self.player = audio.Player()
         self.tabs = QtWidgets.QTabWidget(); self.setCentralWidget(self.tabs)
         self._home(); self._spectrum(); self._settings()
+        self.doctor = Doctor(before_run=self._pause_dev, after_run=self._resume_dev); self.tabs.addTab(self.doctor, "Troubleshoot")
         self.wf = np.full((200, self.cfg["fft_size"]), -100.0)
         self.dev.open(self.cfg)
         self.timer = QtCore.QTimer(timeout=self.tick); self.timer.start(100)
@@ -20,6 +22,7 @@ class Main(QtWidgets.QMainWindow):
                   "Direct sampling", "Bias-tee", "Pi temperature", "CPU load", "Status"]:
             self.lbl[k] = QtWidgets.QLabel("-"); f.addRow(f"<b>{k}</b>", self.lbl[k])
         b = QtWidgets.QPushButton("Re-scan dongle", clicked=self.rescan); f.addRow(b)
+        f.addRow(QtWidgets.QPushButton("Troubleshoot...", clicked=lambda: (self.tabs.setCurrentWidget(self.doctor), self.doctor.refresh())))
         self.tabs.addTab(w, "Home")
 
     def _spectrum(self):
@@ -30,8 +33,12 @@ class Main(QtWidgets.QMainWindow):
         self.preset = QtWidgets.QComboBox(); self.preset.addItems(["Presets..."] + list(config.PRESETS))
         self.preset.activated.connect(self.apply_preset); h.addWidget(self.preset)
         self.mode = QtWidgets.QComboBox(); self.mode.addItems(["wbfm", "nfm", "am"]); h.addWidget(self.mode)
-        self.play = QtWidgets.QPushButton("▶ Listen", checkable=True, toggled=self.toggle_audio); h.addWidget(self.play)
-        v.addLayout(h)
+        self.play = QtWidgets.QPushButton("▶ Listen", clicked=self.start_audio); h.addWidget(self.play)
+        self.stopb = QtWidgets.QPushButton("■ Stop", clicked=self.stop_audio, enabled=False); h.addWidget(self.stopb)
+        v.addLayout(h); h2 = QtWidgets.QHBoxLayout(); h2.addWidget(QtWidgets.QLabel("Volume"))
+        self.vol = QtWidgets.QSlider(QtCore.Qt.Horizontal, minimum=0, maximum=150, value=int(self.cfg.get("volume", 80)))
+        self.vol.valueChanged.connect(self.set_vol); h2.addWidget(self.vol); self.audio_lbl = QtWidgets.QLabel("Audio: stopped"); h2.addWidget(self.audio_lbl, 1)
+        v.addLayout(h2)
         self.plot = pg.PlotWidget(labels={"bottom": "MHz", "left": "dB"}); self.curve = self.plot.plot(pen="y")
         self.img = pg.ImageItem(); wfw = pg.PlotWidget(); wfw.addItem(self.img)
         self.img.setColorMap(pg.colormap.get("viridis"))
@@ -67,24 +74,46 @@ class Main(QtWidgets.QMainWindow):
 
     def status(self, m): self.lbl["Status"].setText(m); self.statusBar().showMessage(m, 5000)
     def rescan(self):
-        if not self.player.running(): self.dev.open(self.cfg)
+        if not getattr(self, "listening", False): self.dev.open(self.cfg)
         self.update_info()
     def tune(self):
         self.cfg["center_freq"] = self.freq.value() * 1e6; config.save(self.cfg); self.dev.apply(self.cfg)
-        if self.player.running(): self.player.start(self.cfg, self.mode.currentText())
+        if getattr(self, "listening", False): self.player.stop(); QtCore.QTimer.singleShot(400, self._launch_audio)
     def apply_preset(self, i):
         if i == 0: return
         f, m = config.PRESETS[self.preset.currentText()]; self.freq.setValue(f / 1e6)
         if m != "none": self.mode.setCurrentText(m)
         self.tune()
-    def toggle_audio(self, on):
-        if on:
-            self.dev.close(); err = self.player.start(self.cfg, self.mode.currentText())
-            if err: self.status(err); self.play.setChecked(False)
-        else:
-            self.player.stop(); self.dev.open(self.cfg)
+    def _pause_dev(self): self.paused = True; self.dev.close()
+    def _resume_dev(self):
+        self.paused = False
+        if not getattr(self, "listening", False): self.dev.open(self.cfg); self.update_info()
+    def set_vol(self, v):
+        self.cfg["volume"] = v; config.save(self.cfg)
+        if not audio.set_volume(v): self.audio_lbl.setText("Volume: pactl/amixer not available")
+    def start_audio(self):
+        self.listening = True; self.play.setEnabled(False); self.stopb.setEnabled(True)
+        self.dev.close(); self.audio_lbl.setText("Audio: releasing dongle...")
+        QtCore.QTimer.singleShot(600, self._launch_audio)
+    def _launch_audio(self):
+        if not self.listening: return
+        err = self.player.start(self.cfg, self.mode.currentText())
+        if err: self._audio_failed(err); return
+        audio.set_volume(self.vol.value())
+        self.audio_lbl.setText(f"Audio: playing {self.mode.currentText()} {self.cfg['center_freq']/1e6:.3f} MHz -> {audio.out_device(self.cfg)}")
+        QtCore.QTimer.singleShot(2000, self._check_audio)
+    def _check_audio(self):
+        if not self.listening: return
+        e = self.player.errors()
+        if e: self._audio_failed(e)
+        else: QtCore.QTimer.singleShot(2000, self._check_audio)
+    def _audio_failed(self, e):
+        self.stop_audio(); self.audio_lbl.setText("Audio error: " + e[:200]); self.status("Audio error: " + e[:200])
+    def stop_audio(self):
+        self.listening = False; self.player.stop(); self.play.setEnabled(True); self.stopb.setEnabled(False)
+        self.audio_lbl.setText("Audio: stopped"); self.dev.open(self.cfg); self.update_info()
     def tick(self):
-        if self.player.running() or not self.dev.info["detected"]: return
+        if getattr(self, "listening", False) or getattr(self, "paused", False) or not self.dev.info["detected"]: return
         x = self.dev.read(self.cfg["fft_size"] * 8)
         if x is None: self.dev.info["detected"] = False; self.status("Dongle lost - plug in and Re-scan"); return
         p = device.compute_psd(x, self.cfg["fft_size"]); c = self.cfg["center_freq"] / 1e6; sr = self.cfg["sample_rate"] / 1e6
@@ -104,6 +133,9 @@ class Main(QtWidgets.QMainWindow):
 
 def main():
     app = QtWidgets.QApplication(sys.argv); w = Main()
-    w.showFullScreen() if "--kiosk" in sys.argv else w.resize(1000, 650); w.show()
+    if "--kiosk" in sys.argv: w.showFullScreen()
+    else:
+        g = app.primaryScreen().availableGeometry()
+        w.setGeometry(g.x(), g.y(), max(480, g.width() // 2), g.height()); w.show()
     if os.environ.get("RPI5SDR_SELFTEST"): QtCore.QTimer.singleShot(1500, app.quit)
     sys.exit(app.exec_())

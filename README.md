@@ -1,15 +1,17 @@
 # RPi5 RTL-SDR GUI (RTL-SDR Blog V3)
 Simple touchscreen-friendly SDR manager for Raspberry Pi 5 (Raspberry Pi OS Bookworm 64-bit) + RTL-SDR Blog V3 (RTL2832U + R820T2).
 
-📘 **Docs:** [Installation Guide](docs/INSTALL.md) · [User Manual](docs/USER_MANUAL.md)
+🩺 **Troubleshoot:** `rpi5-sdr-doctor` (or `--cli`) · 📘 **Docs:** [Installation Guide](docs/INSTALL.md) · [User Manual](docs/USER_MANUAL.md)
 
-Tabs: **Home** (device/tuner/serial, sample rate, freq, gain, PPM, bias-tee, Pi temp, CPU load, re-scan) · **Spectrum** (spectrum + waterfall, tune, presets: FM 88-108, ADS-B 1090, NOAA 137, Airband 118-137, 433 ISM, WBFM/NFM/AM listen via `rtl_fm | aplay`) · **Settings** (sample rate, R820T2 gain list/auto, PPM, direct sampling Q-branch, bias tee via `rtl_biast`, offset tuning) saved to `~/.config/rpi5-sdr/config.json`.
+Tabs: **Home** (device/tuner/serial, sample rate, freq, gain, PPM, bias-tee, Pi temp, CPU load, re-scan) · **Spectrum** (spectrum + waterfall, tune, presets: FM 88-108, ADS-B 1090, NOAA 137, Airband 118-137, 433 ISM, WBFM/NFM/AM listen via `rtl_fm | aplay`) · **Troubleshoot** (pass/fail checks with fix buttons) · **Settings** (sample rate, R820T2 gain list/auto, PPM, direct sampling Q-branch, bias tee via `rtl_biast`, offset tuning) saved to `~/.config/rpi5-sdr/config.json`.
 
 ## Install
 ```bash
-git clone https://github.com/vibhvesh/rpi5-sdr.git rpi5-sdr && cd rpi5-sdr && sudo ./install.sh && sudo reboot
+git clone https://github.com/vibhvesh/rpi5-sdr.git rpi5-sdr && cd rpi5-sdr && sudo bash install.sh && sudo reboot
 ```
-(or copy the zip, `unzip rpi5-sdr.zip && cd rpi5-sdr && sudo ./install.sh`). Builds rtlsdrblog drivers from source, blacklists `dvb_usb_rtl28xxu`, installs udev rules, Python venv (pyrtlsdr, pyqtgraph, system PyQt5/numpy), and a full-screen autostart entry. Run manually: `rpi5-sdr` (windowed) or `rpi5-sdr --kiosk`. Test without dongle: `RPI5SDR_MOCK=1 rpi5-sdr`.
+(or copy the zip, `unzip rpi5-sdr.zip && cd rpi5-sdr && sudo bash install.sh`). Installs all build tools, RTL-SDR Blog drivers from source, PipeWire audio + Bluetooth audio, sox, SDR extras (dump1090, multimon-ng, rtl-433, gqrx when available), blacklists `dvb_usb_rtl28xxu`, udev rules, Python venv, and an autostart entry that opens the app in a **half-screen window** (left half, resizable). Ends with a self-check summary; log in `/var/log/rpi5-sdr-install.log`. Run manually: `rpi5-sdr` (half-screen window) or `rpi5-sdr --kiosk` (optional full-screen).
+
+**Update:** `cd ~/rpi5-sdr && git pull && sudo bash install.sh` Test without dongle: `RPI5SDR_MOCK=1 rpi5-sdr`.
 
 ## Top recommended settings
 | Setting | Value |
@@ -32,6 +34,7 @@ git clone https://github.com/vibhvesh/rpi5-sdr.git rpi5-sdr && cd rpi5-sdr && su
 - *usb_claim_interface error -6*: DVB driver loaded → `sudo modprobe -r dvb_usb_rtl28xxu`, check `/etc/modprobe.d/blacklist-rtlsdr.conf`, reboot.
 - *Permission denied*: user in `plugdev`, re-login; udev rules in `/etc/udev/rules.d/rtl-sdr.rules`.
 - *Lost samples / choppy waterfall*: lower sample rate to 1.024/2.048 MSPS, better PSU.
-- *No audio*: `aplay -l`, set `audio_device` in config JSON (e.g. `plughw:0,0`), HDMI vs headphone (Pi 5 has no 3.5 mm jack — use HDMI or USB audio). Spectrum pauses while listening (one dongle user at a time).
+- *No audio / Listen errors*: the error from rtl_fm/aplay is shown next to the Volume slider; run `rpi5-sdr-doctor` (sound server, sinks, test tone). Audio goes to `pulse` (PipeWire) by default; Bluetooth speakers: pair in the Bluetooth menu/blueman, then set the `bluez_output…` sink as default in the Doctor. HDMI vs headphone (Pi 5 has no 3.5 mm jack — use HDMI or USB audio). Spectrum pauses while listening (one dongle user at a time).
 - *rtl_biast not found*: re-run install.sh (built from rtlsdrblog source).
-- Exit kiosk: Alt+F4; disable autostart: `rm ~/.config/autostart/rpi5-sdr.desktop`.
+- *LIBUSB_ERROR_IO / Could not open SDR*: the app retries and explains the cause (DVB driver loaded, device busy with PID, not on USB). Use the Troubleshoot tab.
+- Exit `--kiosk` mode: Alt+F4; disable autostart: `rm ~/.config/autostart/rpi5-sdr.desktop`.
