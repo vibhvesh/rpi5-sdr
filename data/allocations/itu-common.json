@@ -1,0 +1,64 @@
+{
+  "id": "ITU-COMMON",
+  "name": "Worldwide common tags (approximate)",
+  "region": 0,
+  "source": "Approximate, widely published service categories (FM broadcast, aeronautical mobile, amateur IARU allocations, ADS-B 1090 MHz, ISS amateur downlinks). NOT an official ITU allocation table and NOT legal advice.",
+  "bands": [
+    {
+      "start_hz": 150000,
+      "stop_hz": 30000000,
+      "name": "HF (various services)",
+      "note": "V3 needs direct sampling below ~24 MHz"
+    },
+    {
+      "start_hz": 88000000,
+      "stop_hz": 108000000,
+      "name": "FM broadcasting"
+    },
+    {
+      "start_hz": 108000000,
+      "stop_hz": 118000000,
+      "name": "VOR / aeronautical radionavigation (approx)"
+    },
+    {
+      "start_hz": 118000000,
+      "stop_hz": 137000000,
+      "name": "Aeronautical mobile (airband)"
+    },
+    {
+      "start_hz": 137000000,
+      "stop_hz": 138000000,
+      "name": "Meteorological satellite (e.g. NOAA APT)"
+    },
+    {
+      "start_hz": 144000000,
+      "stop_hz": 146000000,
+      "name": "Amateur 2 m (ITU Region 1/3 segment)"
+    },
+    {
+      "start_hz": 145800000,
+      "stop_hz": 145805000,
+      "name": "ISS FM voice (amateur, 145.800 MHz)"
+    },
+    {
+      "start_hz": 145825000,
+      "stop_hz": 145830000,
+      "name": "ISS / packet APRS (amateur, 145.825 MHz)"
+    },
+    {
+      "start_hz": 156000000,
+      "stop_hz": 162025000,
+      "name": "Maritime mobile (approx)"
+    },
+    {
+      "start_hz": 1090000000,
+      "stop_hz": 1091000000,
+      "name": "ADS-B / SSR 1090 MHz"
+    },
+    {
+      "start_hz": 1240000000,
+      "stop_hz": 1300000000,
+      "name": "Amateur 23 cm / possible analog video downlinks (approx)"
+    }
+  ]
+}

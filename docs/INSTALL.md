@@ -31,15 +31,16 @@ Run `install.sh` with `sudo` from your normal user account (not a root login): i
 
 ## 4. What install.sh does
 1. **Required** apt packages (install stops if any fail): git, cmake, build-essential, pkg-config, libusb-1.0-0-dev, python3-pyqt5, python3-numpy, python3-venv, python3-pip, alsa-utils, usbutils, pipewire, pipewire-pulse, pipewire-alsa, wireplumber, pulseaudio-utils (pactl), policykit-1 (pkexec).
-   **Optional** (logged and skipped if unavailable): libspa-0.2-bluetooth, pavucontrol, bluez, bluez-tools, blueman, sox, libsox-fmt-all, multimon-ng, rtl-433, gqrx-sdr, python3-pyqtgraph, libraspberrypi-bin, and dump1090-fa or dump1090-mutability (their services are disabled so they don't grab the dongle).
+   **Also required:** sqlite3, sox, libsox-fmt-all.
+   **Optional** (logged and skipped if unavailable): libspa-0.2-bluetooth, pavucontrol, bluez, bluez-tools, blueman, multimon-ng, rtl-433, gqrx-sdr, python3-pyqtgraph, libraspberrypi-bin, gpsd, gpsd-clients, python3-gps, mosquitto, mosquitto-clients, and dump1090-fa / dump1090-mutability / readsb (their services are disabled so they don't grab the dongle). gpsd is enabled (idle without a receiver). The mosquitto broker stays disabled unless you set `RPI5SDR_MQTT_BROKER=1`.
    Also enables the bluetooth service and the PipeWire user services (pipewire, pipewire-pulse, wireplumber) for your user.
 2. Purges distro `librtlsdr*` / `rtl-sdr` packages to avoid conflicts.
 3. Clones (or updates) to `/usr/local/src/rtl-sdr-blog` and builds **github.com/rtlsdrblog/rtl-sdr-blog** (with udev rules and kernel-driver detach), installs to `/usr/local` (`rtl_test`, `rtl_fm`, `rtl_biast`, …), runs `ldconfig`.
 4. Writes `/etc/modprobe.d/blacklist-rtlsdr.conf` blacklisting `dvb_usb_rtl28xxu`, `rtl2832`, `rtl2830`, and unloads the DVB driver.
 5. Reloads udev; adds your user to `plugdev`, `audio`, `bluetooth`.
-6. Creates a Python venv at `rpi5-sdr/venv` (with system site-packages) and installs `requirements.txt` (pyrtlsdr <0.3, numpy, pyqtgraph).
-7. Creates launcher `/usr/local/bin/rpi5-sdr`.
-8. Creates `/usr/local/bin/rpi5-sdr-doctor`, autostart `~/.config/autostart/rpi5-sdr.desktop` (runs `rpi5-sdr`, half-screen window), and menu entries "RPi5 SDR" and "RPi5 SDR Doctor".
+6. Creates a Python venv at `rpi5-sdr/venv` (with system site-packages) and installs `requirements.txt` (pyrtlsdr <0.3, numpy, pyqtgraph, aiohttp, paho-mqtt, skyfield, scipy, gpsd-py3). Optional: `RPI5SDR_INSTALL_URH=1` also pip-installs Universal Radio Hacker.
+7. Creates launchers `/usr/local/bin/rpi5-sdr`, `rpi5-sdr-doctor`, `rpi5-sdr-web`, `rpi5-sdr-monitor`, `rpi5-sdr-central`, and `rpi5-sdr-webui` (Chromium/Firefox in a **half-screen window**, never `--kiosk` / `--start-fullscreen`).
+8. Creates autostart `~/.config/autostart/rpi5-sdr.desktop` (runs `rpi5-sdr`, half-screen window), and menu entries "RPi5 SDR", "RPi5 SDR Doctor", and "RPi5 SDR Web".
 9. Sets boot to desktop with autologin (`raspi-config nonint do_boot_behaviour B4`).
 
 > Don't move or delete the cloned folder after installing — the launcher points to it.
@@ -108,3 +109,34 @@ rpi5-sdr-web --port 8081                    # run manually on another port (stop
 ```
 **Firewall:** Raspberry Pi OS has no firewall by default. If you enabled `ufw`, the installer runs `ufw allow 8080/tcp`; for other firewalls open TCP 8080 for your LAN only. No authentication — LAN use only, never expose to the internet.
 Uninstall: `sudo systemctl disable --now rpi5-sdr-web && sudo rm /etc/systemd/system/rpi5-sdr-web.service /usr/local/bin/rpi5-sdr-web`.
+
+
+## 11. Monitor engine, GPS, MQTT, central map
+The web service (`rpi5-sdr-web`, port **8080**) now runs the monitor engine in-process: watchlist detection, clip recording, fingerprinting, analytics APIs, and tool plugins. The desktop app still has priority on the dongle.
+
+A separate **rpi5-sdr-monitor** systemd unit is installed but **disabled**. Use it only for a headless Pi when the web service is off (`Conflicts=rpi5-sdr-web.service`):
+
+```bash
+sudo systemctl disable --now rpi5-sdr-web
+sudo systemctl enable --now rpi5-sdr-monitor
+```
+
+**Central map** (optional, port **8081**):
+
+```bash
+RPI5SDR_CENTRAL=1 sudo -E bash install.sh
+# or later: sudo systemctl enable --now rpi5-sdr-central
+```
+
+Open `http://<pi-ip>:8081/`. Nodes POST to `http://<central-ip>:8081/api/ingest` (or publish MQTT to `rpi5-sdr/detections/#` if the central process is started with `sync.mqtt_listen` true). No password — LAN only. If `ufw` is active the installer opens 8081/tcp when central is enabled.
+
+**Local MQTT broker:** `RPI5SDR_MQTT_BROKER=1 sudo -E bash install.sh` enables mosquitto.
+
+Clips and the SQLite database default to `~/rpi5-sdr-data/` (`detections.db`, `clips/`, `records/`, `cache/iss.tle`). Override with `storage_dir` in `~/.config/rpi5-sdr/config.json` or `RPI5SDR_STORAGE` / `RPI5SDR_DB`.
+
+## 12. Tests (on a PC or the Pi)
+```bash
+cd ~/rpi5-sdr
+./venv/bin/python -m unittest discover -s tests -v
+```
+Unit tests use synthetic IQ (no dongle). A mock web server is started on port 18080 during `tests/test_web_api.py`.

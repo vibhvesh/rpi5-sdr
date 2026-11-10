@@ -1,0 +1,53 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RPi5 SDR — Central Map</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+body{font-family:sans-serif;background:#111;color:#ddd;margin:0}
+header{padding:10px 14px;background:#1c1c1c}
+#map{height:calc(100vh - 110px)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+input,button,select{background:#333;color:#eee;border:1px solid #555;padding:5px;border-radius:4px}
+.note{font-size:12px;color:#aaa}
+</style></head><body>
+<header>
+  <h2 style="margin:0">RPi5 SDR — multi-node map</h2>
+  <div class="row">
+    Since <input id="since" type="datetime-local">
+    Until <input id="until" type="datetime-local">
+    <button onclick="load()">Refresh</button>
+    <span id="msg" class="note">Loading…</span>
+  </div>
+  <div class="note">OSM tiles need internet. No password — LAN use only. Frequency tags are approximate, not legal allocations.</div>
+</header>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map = L.map('map').setView([22.3, 73.2], 4);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap'}).addTo(map);
+let layer = L.layerGroup().addTo(map);
+function qs(){
+  const p = new URLSearchParams();
+  const s = document.getElementById('since').value, u = document.getElementById('until').value;
+  if(s) p.set('since', new Date(s).toISOString());
+  if(u) p.set('until', new Date(u).toISOString());
+  return p.toString();
+}
+function load(){
+  document.getElementById('msg').textContent = 'Loading…';
+  fetch('/api/map?'+qs()).then(r=>r.json()).then(data=>{
+    layer.clearLayers();
+    const bounds = [];
+    (data.nodes||[]).forEach(n=>{
+      if(n.lat==null || n.lon==null) return;
+      const ll = [n.lat, n.lon]; bounds.push(ll);
+      const freqs = (n.frequencies||[]).map(f=>`${(f.frequency_hz/1e6).toFixed(3)} MHz ×${f.n} (peak ${Number(f.peak).toFixed(1)} dB)`).join('<br>') || 'no detections in window';
+      L.circleMarker(ll, {radius: 10, color:'#ffb74d', fillColor:'#ff9800', fillOpacity:0.7})
+        .bindPopup(`<b>${n.node_id}</b><br>${n.count||0} detections<br>${freqs}`).addTo(layer);
+    });
+    if(bounds.length) map.fitBounds(bounds, {padding:[40,40], maxZoom:10});
+    document.getElementById('msg').textContent = `${(data.nodes||[]).length} node(s), ${data.total||0} detections`;
+  }).catch(e=>{ document.getElementById('msg').textContent = 'Error: '+e; });
+}
+load();
+</script>
+</body></html>

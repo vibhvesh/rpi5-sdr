@@ -1,12 +1,27 @@
 <!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>RPi5 SDR Web</title><style>
-body{font-family:sans-serif;background:#111;color:#ddd;margin:0;padding:10px}h2{margin:4px 0}
+body{font-family:sans-serif;background:#111;color:#ddd;margin:0;padding:10px}h2,h3{margin:4px 0}
 .card{background:#1c1c1c;border-radius:8px;padding:10px;margin-bottom:10px}
 #info td{padding:2px 10px 2px 0}#msg{font-weight:bold;color:#ffb74d}canvas{width:100%;display:block;background:#000}
-input,select,button{background:#333;color:#eee;border:1px solid #555;padding:5px;border-radius:4px;margin:2px}
+input,select,button,textarea{background:#333;color:#eee;border:1px solid #555;padding:5px;border-radius:4px;margin:2px}
 pre{white-space:pre-wrap;font-size:12px;max-height:400px;overflow:auto}.row{display:flex;flex-wrap:wrap;gap:10px}
+nav button{margin-right:4px} nav button.active{background:#555}
+.tab{display:none}.tab.active{display:block}
+table.data{border-collapse:collapse;width:100%;font-size:13px}
+table.data th,table.data td{border-bottom:1px solid #333;padding:4px 6px;text-align:left}
+.note{font-size:12px;color:#aaa}
+#hm{width:100%;height:280px;background:#000}
 </style></head><body>
 <h2>RPi5 RTL-SDR — Web Dashboard</h2>
+<nav>
+  <button class="active" data-tab="live" onclick="showTab(this)">Live</button>
+  <button data-tab="watch" onclick="showTab(this)">Watchlist</button>
+  <button data-tab="analytics" onclick="showTab(this)">Analytics</button>
+  <button data-tab="tools" onclick="showTab(this)">Tools</button>
+  <button data-tab="settings" onclick="showTab(this)">Settings</button>
+</nav>
+
+<div id="tab-live" class="tab active">
 <div class="row"><div class="card" style="flex:1;min-width:280px"><div id="msg">Connecting...</div><table id="info"></table></div>
 <div class="card" style="flex:2;min-width:300px">
 Freq <input id="freq" type="number" step="0.001" style="width:110px"> MHz <button onclick="tune()">Tune</button>
@@ -17,10 +32,105 @@ PPM <input id="ppm" type="number" style="width:60px" onchange="send({ppm:this.va
 <div class="card"><canvas id="spec" width="1024" height="220"></canvas><canvas id="wf" width="1024" height="300"></canvas>
 <div id="axis" style="display:flex;justify-content:space-between;font-size:12px"></div></div>
 <div class="card"><button onclick="doctor()">Run Doctor report</button><pre id="doc"></pre></div>
+</div>
+
+<div id="tab-watch" class="tab">
+<div class="card">
+  <h3>Watchlist</h3>
+  <p class="note">When a frequency crosses its threshold the monitor records an IQ clip and optional audio, logs a fingerprint, and tags location / allocation.</p>
+  Freq <input id="w-freq" type="number" step="0.001" style="width:110px"> MHz
+  BW <input id="w-bw" type="number" value="12.5" step="0.1" style="width:70px"> kHz
+  Threshold dBFS <input id="w-thr" type="number" placeholder="auto" style="width:80px">
+  Label <input id="w-lab" placeholder="label">
+  Demod <select id="w-dem"><option>nfm</option><option>wbfm</option><option>am</option><option>none</option></select>
+  <label><input id="w-iq" type="checkbox" checked> IQ</label>
+  <label><input id="w-au" type="checkbox" checked> audio</label>
+  <button onclick="addWatch()">Add</button>
+  <h4>Target presets</h4>
+  <div id="preset-list"></div>
+  <table class="data" id="watch-table"><thead><tr><th>MHz</th><th>BW</th><th>Thr</th><th>Label</th><th>On</th><th></th></tr></thead><tbody></tbody></table>
+</div>
+</div>
+
+<div id="tab-analytics" class="tab">
+<div class="card">
+  <h3>Activity heatmap (local hour vs MHz)</h3>
+  <canvas id="hm" width="900" height="280"></canvas>
+  <div class="row">
+    <div>Top signals, hour <input id="top-hour" type="number" min="0" max="23" style="width:60px"> <button onclick="loadTop()">Load</button></div>
+    <a href="/api/export.csv" download="detections.csv"><button>Export CSV</button></a>
+    <label><input id="unk-only" type="checkbox" onchange="loadDets()"> unknown only</label>
+  </div>
+  <pre id="top-out"></pre>
+</div>
+<div class="card">
+  <h3>Unknown / unlabeled signals</h3>
+  <div id="unknown-list"></div>
+</div>
+<div class="card">
+  <h3>Detections</h3>
+  <table class="data" id="det-table"><thead><tr><th>Time</th><th>MHz</th><th>Peak</th><th>Class</th><th>Label</th><th>Alloc</th><th>Bearing</th><th>Clips</th></tr></thead><tbody></tbody></table>
+  <div id="player"></div>
+</div>
+</div>
+
+<div id="tab-tools" class="tab">
+  <div id="tools-root"><p class="note">Loading tools…</p></div>
+</div>
+
+<div id="tab-settings" class="tab">
+<div class="card">
+  <h3>Node &amp; location</h3>
+  <p class="note">Allocation tags are approximate and not legal advice. GPS uses gpsd when available; otherwise set lat/lon manually.</p>
+  Node id <input id="s-node"> Device serial <input id="s-ser" placeholder="first dongle">
+  <label><input id="s-mon" type="checkbox"> monitor enabled</label><br>
+  Lat <input id="s-lat" type="number" step="0.0001"> Lon <input id="s-lon" type="number" step="0.0001">
+  Source <select id="s-lsrc"><option>gpsd</option><option>manual</option></select>
+  Region <select id="s-reg"><option>auto</option><option>ITU-R3-IN</option><option>ITU-R2-US</option><option>ITU-COMMON</option></select>
+  <h3>Sync</h3>
+  <label><input id="s-sync" type="checkbox"> push detections</label>
+  Mode <select id="s-smode"><option>http</option><option>mqtt</option></select>
+  HTTP URL <input id="s-hurl" placeholder="http://central:8081/api/ingest" style="width:280px">
+  MQTT host <input id="s-mhost" style="width:120px"> port <input id="s-mport" type="number" style="width:70px">
+  <h3>Storage</h3>
+  Dir <input id="s-dir" style="width:220px"> max MB <input id="s-disk" type="number" style="width:80px">
+  retention days <input id="s-ret" type="number" style="width:60px">
+  clip seconds <input id="s-clip" type="number" step="0.5" style="width:60px">
+  format <select id="s-fmt"><option>cu8</option><option>npy</option></select>
+  <h3>Tools enable</h3>
+  <label><input id="t-clf" type="checkbox"> classifier</label>
+  <label><input id="t-df" type="checkbox"> direction finder</label>
+  <label><input id="t-scn" type="checkbox"> auto-scanner</label>
+  <label><input id="t-rec" type="checkbox"> IQ recorder</label>
+  DF serial B <input id="t-dfb" placeholder="second dongle serial"> baseline m <input id="t-dfd" type="number" step="0.01" style="width:70px">
+  <br><button onclick="saveSettings()">Save settings</button>
+  <pre id="s-out"></pre>
+  <p class="note">Central map (if rpi5-sdr-central is running): <a id="central-link" href="#" target="_blank">port 8081</a></p>
+</div>
+<div class="card">
+  <h3>ISS passes</h3>
+  <button onclick="loadISS()">Predict passes</button>
+  <pre id="iss-out"></pre>
+  <h3>ADS-B (dump1090 / readsb)</h3>
+  <button onclick="loadADSB()">Poll aircraft.json</button>
+  <pre id="adsb-out"></pre>
+</div>
+</div>
+
 <script>
 let ws, inited=false; const $=id=>document.getElementById(id);
 const sp=$('spec'), sc=sp.getContext('2d'), wf=$('wf'), wc=wf.getContext('2d');
-function send(o){ if(ws&&ws.readyState==1) ws.send(JSON.stringify(o)); else fetch('/api/set',{method:'POST',body:JSON.stringify(o)}); }
+function showTab(btn){
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  $('tab-'+btn.dataset.tab).classList.add('active');
+  if(btn.dataset.tab==='watch') loadWatch();
+  if(btn.dataset.tab==='analytics'){ loadHeatmap(); loadUnknown(); loadDets(); }
+  if(btn.dataset.tab==='tools') loadTools();
+  if(btn.dataset.tab==='settings') loadSettings();
+}
+function send(o){ if(ws&&ws.readyState==1) ws.send(JSON.stringify(o)); else fetch('/api/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(o)}); }
 function tune(){ send({center_freq:parseFloat($('freq').value)*1e6}); }
 function preset(){ const v=$('preset').value; if(v!=='Presets...'){ $('freq').value=(parseFloat(v)/1e6).toFixed(3); tune(); } }
 function doctor(){ $('doc').textContent='Running...'; fetch('/api/doctor').then(r=>r.text()).then(t=>$('doc').textContent=t); }
@@ -29,12 +139,12 @@ function showInfo(i){
   const rows=[['Device',i.detected?'DETECTED':'NOT DETECTED'],['Name',i.name],['Tuner',i.tuner],['Serial',i.serial],
    ['Center freq',(i.center_freq/1e6).toFixed(4)+' MHz'],['Sample rate',(i.sample_rate/1e6).toFixed(3)+' MSPS'],['Gain',i.gain],
    ['PPM',i.ppm],['Bias-tee',i.bias_tee?'ON':'OFF'],['Pi temp',i.temp!=null?i.temp.toFixed(1)+' °C':'n/a'],
-   ['CPU load',i.cpu!=null?i.cpu.toFixed(0)+' %':'n/a'],['Web URL',i.url]];
+   ['CPU load',i.cpu!=null?i.cpu.toFixed(0)+' %':'n/a'],['Node',i.node_id||''],['Web URL',i.url]];
   $('info').innerHTML=rows.map(r=>`<tr><td><b>${r[0]}</b></td><td>${r[1]}</td></tr>`).join('');
   if(!inited){ inited=true; $('freq').value=(i.center_freq/1e6).toFixed(3);
-    for(const [k,v] of Object.entries(i.presets)) $('preset').add(new Option(k,v));
-    $('gain').add(new Option('auto','auto')); i.gains.forEach(g=>$('gain').add(new Option(g,g)));
-    i.rates.forEach(r=>$('rate').add(new Option((r/1e6).toFixed(3),r)));
+    for(const [k,v] of Object.entries(i.presets||{})) $('preset').add(new Option(k,v));
+    $('gain').add(new Option('auto','auto')); (i.gains||[]).forEach(g=>$('gain').add(new Option(g,g)));
+    (i.rates||[]).forEach(r=>$('rate').add(new Option((r/1e6).toFixed(3),r)));
     $('gain').value=String(i.gain); $('rate').value=String(i.sample_rate); $('ppm').value=i.ppm; }
 }
 function color(v){ v=Math.max(0,Math.min(1,v)); return [Math.floor(255*Math.min(1,v*2)),Math.floor(255*Math.max(0,v*2-1)),Math.floor(255*(1-v)*0.6)]; }
@@ -53,5 +163,148 @@ function connect(){
   ws.onmessage=e=>{ typeof e.data==='string'?showInfo(JSON.parse(e.data)):frame(e.data); };
   ws.onclose=()=>{ $('msg').textContent='Disconnected - retrying...'; setTimeout(connect,2000); };
 }
+function addWatch(){
+  const body={frequency_hz:parseFloat($('w-freq').value)*1e6, bandwidth_hz:parseFloat($('w-bw').value)*1e3,
+    label:$('w-lab').value, demod:$('w-dem').value, record_iq:$('w-iq').checked, record_audio:$('w-au').checked};
+  const t=$('w-thr').value; if(t!=='') body.threshold_dbfs=parseFloat(t);
+  fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(()=>loadWatch());
+}
+function loadWatch(){
+  fetch('/api/watchlist').then(r=>r.json()).then(j=>{
+    const tb=$('watch-table').querySelector('tbody'); tb.innerHTML='';
+    (j.watchlist||[]).forEach(w=>{
+      const tr=tb.insertRow();
+      tr.innerHTML=`<td>${(w.frequency_hz/1e6).toFixed(4)}</td><td>${((w.bandwidth_hz||0)/1e3).toFixed(1)} kHz</td>
+        <td>${w.threshold_dbfs==null?'auto':w.threshold_dbfs}</td><td>${w.label||''}</td>
+        <td>${w.enabled?'yes':'no'}</td>
+        <td><button onclick="delWatch(${w.id})">Remove</button></td>`;
+    });
+  });
+  fetch('/api/presets').then(r=>r.json()).then(j=>{
+    $('preset-list').innerHTML=(j.presets||[]).map(p=>{
+      const dis=p.enabled? '':' <i>(disabled/partial)</i>';
+      return `<div><button onclick="addPreset('${p.id}')">Add</button> <b>${p.label}</b>${dis}
+        — ${(p.frequency_hz/1e6).toFixed(3)} MHz. ${p.note}</div>`;
+    }).join('');
+  });
+}
+function addPreset(id){
+  fetch('/api/presets').then(r=>r.json()).then(j=>{
+    const p=(j.presets||[]).find(x=>x.id===id); if(!p) return;
+    fetch('/api/watchlist',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      frequency_hz:p.frequency_hz, bandwidth_hz:p.bandwidth_hz, label:p.label, demod:p.demod,
+      enabled:!!p.enabled, record_iq:true, record_audio:p.demod && p.demod!=='none'
+    })}).then(()=>loadWatch());
+  });
+}
+function delWatch(id){ fetch('/api/watchlist/'+id,{method:'DELETE'}).then(()=>loadWatch()); }
+function loadHeatmap(){
+  fetch('/api/analytics/heatmap').then(r=>r.json()).then(j=>{
+    const cells=j.cells||[]; const cnv=$('hm'); const ctx=cnv.getContext('2d');
+    ctx.fillStyle='#000'; ctx.fillRect(0,0,cnv.width,cnv.height);
+    const freqs=[...new Set(cells.map(c=>c.freq_mhz))].sort((a,b)=>a-b);
+    const max=Math.max(1,...cells.map(c=>c.n));
+    const left=50, top=10, W=cnv.width-left-10, H=cnv.height-30;
+    const fh=freqs.length? H/freqs.length : H;
+    cells.forEach(cell=>{
+      const yi=freqs.indexOf(cell.freq_mhz); if(yi<0) return;
+      const x=left+(cell.hour/24)*W, y=top+yi*fh;
+      const v=cell.n/max; const col=color(v);
+      ctx.fillStyle=`rgb(${col[0]},${col[1]},${col[2]})`;
+      ctx.fillRect(x,y,W/24+0.5,fh+0.5);
+    });
+    ctx.fillStyle='#aaa'; ctx.font='11px sans-serif';
+    for(let h=0;h<24;h+=3){ ctx.fillText(String(h), left+(h/24)*W, cnv.height-8); }
+    freqs.forEach((f,i)=>{ if(i%Math.ceil(freqs.length/8||1)===0) ctx.fillText(f.toFixed(3), 2, top+i*fh+10); });
+  });
+}
+function loadTop(){
+  const h=$('top-hour').value;
+  fetch('/api/analytics/top'+(h===''?'':'?hour='+h)).then(r=>r.json()).then(j=>{$('top-out').textContent=JSON.stringify(j.top||[],null,2);});
+}
+function loadUnknown(){
+  fetch('/api/analytics/unknown').then(r=>r.json()).then(j=>{
+    $('unknown-list').innerHTML=(j.signals||[]).map(s=>`<div>#${s.id} class=${s.class_name||'?'} hits=${s.hit_count||0}
+      <input id="lab-${s.id}" placeholder="new label"> <button onclick="relabel(${s.id})">Save label</button></div>`).join('')
+      || '<p class="note">None unlabeled.</p>';
+  });
+}
+function relabel(id){
+  const label=$('lab-'+id).value;
+  fetch('/api/signals/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({label})})
+    .then(()=>{loadUnknown(); loadDets();});
+}
+function loadDets(){
+  const u=$('unk-only').checked?'?unknown=1':'';
+  fetch('/api/detections'+u).then(r=>r.json()).then(j=>{
+    const tb=$('det-table').querySelector('tbody'); tb.innerHTML='';
+    (j.detections||[]).forEach(d=>{
+      const tr=tb.insertRow();
+      const clips=[];
+      if(d.clip_wav_path) clips.push(`<a href="/api/clips/d${d.id}-wav" target="_blank">wav</a>`);
+      if(d.clip_iq_path) clips.push(`<a href="/api/clips/d${d.id}-iq">iq</a>`);
+      tr.innerHTML=`<td>${d.start_ts||''}</td><td>${(d.frequency_hz/1e6).toFixed(4)}</td>
+        <td>${d.peak_dbfs!=null?Number(d.peak_dbfs).toFixed(1):''}</td>
+        <td>${d.class_name||''}${d.class_confidence!=null?' ('+Number(d.class_confidence).toFixed(2)+')':''}</td>
+        <td>${d.signal_label|| (d.is_new?'NEW':'')}</td><td>${d.allocation||''}</td>
+        <td>${d.bearing_deg!=null?Number(d.bearing_deg).toFixed(1)+'° '+(d.bearing_method||''):''}</td>
+        <td>${clips.join(' ')}</td>`;
+    });
+  });
+}
+function loadTools(){
+  fetch('/api/tools').then(r=>r.json()).then(j=>{
+    const root=$('tools-root'); root.innerHTML='';
+    (j.tools||[]).forEach(t=>{
+      const d=document.createElement('div'); d.innerHTML=t.panel_html||`<div class="card"><h3>${t.title}</h3></div>`;
+      root.appendChild(d);
+      if(t.panel_js){ try{ (0,eval)(t.panel_js); }catch(e){ console.error(t.name,e); } }
+    });
+  });
+}
+function loadSettings(){
+  fetch('/api/config').then(r=>r.json()).then(c=>{
+    $('s-node').value=c.node_id||''; $('s-ser').value=c.device_serial||'';
+    $('s-mon').checked=!!c.monitor_enabled;
+    const loc=c.location||{}; $('s-lat').value=loc.lat??''; $('s-lon').value=loc.lon??'';
+    $('s-lsrc').value=loc.source||'gpsd'; $('s-reg').value=loc.region||'auto';
+    const s=c.sync||{}; $('s-sync').checked=!!s.enabled; $('s-smode').value=s.mode||'http';
+    $('s-hurl').value=s.http_url||''; $('s-mhost').value=s.mqtt_host||''; $('s-mport').value=s.mqtt_port||1883;
+    $('s-dir').value=c.storage_dir||''; $('s-disk').value=c.max_disk_mb||4096; $('s-ret').value=c.retention_days||30;
+    $('s-clip').value=c.clip_seconds||2; $('s-fmt').value=c.clip_format||'cu8';
+    const t=c.tools||{};
+    $('t-clf').checked=!!(t.classifier&&t.classifier.enabled);
+    $('t-df').checked=!!(t.direction_finder&&t.direction_finder.enabled);
+    $('t-scn').checked=!!(t.scanner&&t.scanner.enabled);
+    $('t-rec').checked=!!(t.iq_recorder&&t.iq_recorder.enabled);
+    $('t-dfb').value=(t.direction_finder&&t.direction_finder.serial_b)||'';
+    $('t-dfd').value=(t.direction_finder&&t.direction_finder.baseline_m)||0.15;
+  });
+  const host=location.hostname;
+  $('central-link').href='http://'+host+':8081/';
+  $('central-link').textContent='http://'+host+':8081/';
+}
+function saveSettings(){
+  const body={
+    node_id:$('s-node').value, device_serial:$('s-ser').value, monitor_enabled:$('s-mon').checked,
+    storage_dir:$('s-dir').value, max_disk_mb:parseFloat($('s-disk').value),
+    retention_days:parseFloat($('s-ret').value), clip_seconds:parseFloat($('s-clip').value),
+    clip_format:$('s-fmt').value,
+    location:{lat:$('s-lat').value===''?null:parseFloat($('s-lat').value),
+              lon:$('s-lon').value===''?null:parseFloat($('s-lon').value),
+              source:$('s-lsrc').value, region:$('s-reg').value},
+    sync:{enabled:$('s-sync').checked, mode:$('s-smode').value, http_url:$('s-hurl').value,
+          mqtt_host:$('s-mhost').value, mqtt_port:parseInt($('s-mport').value||'1883',10)},
+    tools:{classifier:{enabled:$('t-clf').checked},
+           scanner:{enabled:$('t-scn').checked},
+           iq_recorder:{enabled:$('t-rec').checked},
+           direction_finder:{enabled:$('t-df').checked, serial_b:$('t-dfb').value,
+                             baseline_m:parseFloat($('t-dfd').value||'0.15')}}
+  };
+  fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(r=>r.json()).then(j=>{$('s-out').textContent=JSON.stringify(j);});
+}
+function loadISS(){ $('iss-out').textContent='…'; fetch('/api/iss/passes').then(r=>r.json()).then(j=>{$('iss-out').textContent=JSON.stringify(j,null,2);}); }
+function loadADSB(){ $('adsb-out').textContent='…'; fetch('/api/adsb').then(r=>r.json()).then(j=>{$('adsb-out').textContent=JSON.stringify(j,null,2);}); }
 connect();
 </script></body></html>

@@ -1,0 +1,98 @@
+{
+  "id": "ITU-R2-US",
+  "name": "ITU Region 2 / United States (approximate tags)",
+  "region": 2,
+  "source": "Approximate tags inspired by publicly described US / ITU Region 2 service categories. NOT an official FCC allocation table extract and NOT legal advice. Check the current FCC table and local law before any use.",
+  "bands": [
+    {
+      "start_hz": 88000000,
+      "stop_hz": 108000000,
+      "name": "FM broadcasting"
+    },
+    {
+      "start_hz": 118000000,
+      "stop_hz": 137000000,
+      "name": "Aeronautical mobile (airband)"
+    },
+    {
+      "start_hz": 137000000,
+      "stop_hz": 138000000,
+      "name": "Meteorological satellite (e.g. NOAA APT)"
+    },
+    {
+      "start_hz": 144000000,
+      "stop_hz": 148000000,
+      "name": "Amateur 2 m (Region 2)"
+    },
+    {
+      "start_hz": 145800000,
+      "stop_hz": 145805000,
+      "name": "ISS FM voice (amateur, 145.800 MHz)"
+    },
+    {
+      "start_hz": 145825000,
+      "stop_hz": 145830000,
+      "name": "ISS / packet APRS (amateur, 145.825 MHz)"
+    },
+    {
+      "start_hz": 156000000,
+      "stop_hz": 162025000,
+      "name": "Maritime mobile (approx)"
+    },
+    {
+      "start_hz": 222000000,
+      "stop_hz": 225000000,
+      "name": "Amateur 1.25 m (Region 2)"
+    },
+    {
+      "start_hz": 420000000,
+      "stop_hz": 450000000,
+      "name": "Amateur 70 cm (Region 2)"
+    },
+    {
+      "start_hz": 433050000,
+      "stop_hz": 434790000,
+      "name": "70 cm / 433 MHz (often amateur in Region 2; ISM-like use elsewhere)"
+    },
+    {
+      "start_hz": 698000000,
+      "stop_hz": 806000000,
+      "name": "Broadcasting / mobile broadband (approx)"
+    },
+    {
+      "start_hz": 824000000,
+      "stop_hz": 849000000,
+      "name": "Cellular uplink (approx; energy-detect tag only)"
+    },
+    {
+      "start_hz": 869000000,
+      "stop_hz": 894000000,
+      "name": "Cellular downlink (approx; energy-detect tag only)"
+    },
+    {
+      "start_hz": 902000000,
+      "stop_hz": 928000000,
+      "name": "ISM 902-928 MHz (Region 2)"
+    },
+    {
+      "start_hz": 1090000000,
+      "stop_hz": 1091000000,
+      "name": "ADS-B / SSR 1090 MHz"
+    },
+    {
+      "start_hz": 1240000000,
+      "stop_hz": 1300000000,
+      "name": "Amateur 23 cm / possible analog video downlinks (approx)"
+    },
+    {
+      "start_hz": 1710000000,
+      "stop_hz": 1766000000,
+      "name": "PCS / GSM 1800-ish uplink edge (partial; V3 max ~1766 MHz)"
+    },
+    {
+      "start_hz": 1805000000,
+      "stop_hz": 1880000000,
+      "name": "GSM 1800 / PCS downlink (OUT OF RANGE for RTL-SDR Blog V3)"
+    }
+  ]
+}

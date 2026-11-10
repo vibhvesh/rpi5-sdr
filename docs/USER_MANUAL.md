@@ -1,8 +1,8 @@
 # User Manual — RPi5 RTL-SDR GUI
 
 ## 1. Overview
-A simple PyQt5 + pyqtgraph app (plus the **RPi5 SDR Doctor** troubleshooter) for the Raspberry Pi 5 and RTL-SDR Blog V3. It has four tabs:
-**Home** (device and system info), **Spectrum** (spectrum, waterfall, tuning, presets, audio), **Settings** (radio settings saved to a JSON file), and **Troubleshoot** (§7a).
+A simple PyQt5 + pyqtgraph desktop app plus a browser dashboard and a background monitor for the Raspberry Pi 5 and RTL-SDR Blog V3. The desktop has four tabs:
+**Home**, **Spectrum**, **Settings**, and **Troubleshoot** (§7a). The web UI (§14–§16) adds Watchlist, Analytics, and plugin Tools. Nothing starts fullscreen: the desktop window and `rpi5-sdr-webui` both use about half the screen.
 
 ## 2. Launching
 | How | Command |
@@ -12,6 +12,9 @@ A simple PyQt5 + pyqtgraph app (plus the **RPi5 SDR Doctor** troubleshooter) for
 | Full-screen (optional) | `rpi5-sdr --kiosk` |
 | Troubleshooter | `rpi5-sdr-doctor`, `rpi5-sdr-doctor --cli`, or "RPi5 SDR Doctor" menu entry |
 | Demo without a dongle | `RPI5SDR_MOCK=1 rpi5-sdr` (simulated device, noise + one test tone) |
+| Web dashboard (browser, half-screen window) | `rpi5-sdr-webui` or `http://<pi-ip>:8080` |
+| Headless monitor | `rpi5-sdr-monitor` (only if the web service is stopped) |
+| Central map | `rpi5-sdr-central` then `http://<pi-ip>:8081/` |
 
 The app opens the dongle at start (up to 4 attempts). If it fails it still runs, shows **NOT DETECTED** and a clear reason in Status: DVB kernel driver loaded, device busy (with process name and PID, e.g. rtl_fm/rtl_tcp/dump1090), not on USB, or permission problem.
 
@@ -163,3 +166,68 @@ The page shows: device/Home info (status, name, tuner, serial, frequency, sample
 Listening to audio is only available in the desktop app.
 
 The web page has **no password**; use it only on a trusted home network. Do not port-forward 8080 on your router.
+
+
+## 15. Watchlist, recordings, and the database
+Open the **Watchlist** tab on `http://<pi-ip>:8080`. Add a frequency (MHz), bandwidth, optional absolute threshold in dBFS (leave empty to use an adaptive noise-floor + margin), a label, and whether to save IQ and/or demodulated audio.
+
+When the signal crosses the threshold the monitor:
+1. Records an IQ clip (`.cu8` by default, or `.npy`) and optional WAV (simple software NFM/WBFM/AM — not `rtl_fm`).
+2. Builds a 64-bin normalized FFT **fingerprint** and matches it against previous signals (cosine similarity, default 0.90). Repeats share a `signal_id`; new fingerprints are flagged as unlabeled.
+3. Stores a row in SQLite (`~/rpi5-sdr-data/detections.db`): frequency, start time, duration, peak dBFS, bandwidth, lat/lon, allocation tag, node id, clip paths, class, confidence, optional bearing.
+4. Optionally pushes the row to a central server (HTTP POST or MQTT) via a retry queue.
+
+Clips live under `~/rpi5-sdr-data/clips`. Retention (`retention_days`, default 30) and `max_disk_mb` (default 4096) delete the oldest files first and clear the paths in the database. Play or download clips from the Analytics detection list (`/api/clips/d<id>-wav` and `...-iq`). Export the table with **Export CSV**.
+
+The desktop app still has exclusive dongle priority: while it is open, monitoring pauses.
+
+## 16. Analytics tab
+- Heatmap of detections by **local hour-of-day** vs frequency (MHz).
+- Top signals for a chosen hour.
+- Unknown / unlabeled signals, with a rename box (this sets `signals.label` and clears the “new” flag).
+- Detection browser (filter to unknowns) showing class, allocation tag, bearing, and clip links.
+
+Classifier labels (FM voice, AM, narrowband digital, wideband digital, carrier, noise) are **heuristic and unvalidated** — treat them as hints.
+
+## 17. Location, allocations, and legal notes
+Set manual lat/lon on the web Settings tab, or attach a USB GPS and use gpsd (`location.source`: `gpsd` or `manual`; `region`: `auto`, `ITU-R3-IN`, `ITU-R2-US`, or `ITU-COMMON`).
+
+Allocation names come from bundled JSON under `data/allocations/`. They are **approximate tags inspired by publicly described NFAP/FCC-style categories**, not official tables and not legal advice. See `data/allocations/README.md`.
+
+This software does **not** decode cellular payloads, trunked public-safety systems, or encrypted channels. GSM 900 presets are energy-detection tags only. GSM 1800 is a **disabled/partial** preset: the V3 tops out around 1766 MHz, so only the 1710–1766 MHz uplink edge is even theoretically tunable (usually poorly) and the 1805–1880 MHz downlink is out of range.
+
+Receiving rules vary by country. Check local law (in India: Indian Telegraph / Wireless Telegraphy Acts and WPC/NFAP) before use.
+
+## 18. Multi-node sync and the central map
+On each node, Settings → Sync:
+- HTTP: set the central URL to `http://<central-ip>:8081/api/ingest`
+- MQTT: set host/port/topic (`rpi5-sdr/detections/<node_id>`)
+
+Failed pushes stay in a SQLite retry queue (exponential backoff).
+
+On the central machine enable `rpi5-sdr-central` (port 8081). The map page (`/`) uses Leaflet / OpenStreetMap tiles (needs internet for tiles) and a time filter. Markers show which frequencies lit up at each site.
+
+## 19. Built-in target presets
+Add any of these from the Watchlist tab (GSM 1800 stays disabled unless you explicitly add it and understand the tuner limit):
+
+| Preset | Notes |
+|---|---|
+| Drone / ISM 433, 868, 915 MHz | Energy detection. 868 is mainly Region 1 SRD; 915 is mainly Region 2 ISM. Many drones also use 2.4 GHz (out of V3 range). |
+| 1.2 GHz analog video (1240–1300) | Wider than one slice — hop/scan. No video decode. |
+| GSM 900 UL/DL | Energy detection only — no decoding. |
+| GSM 1800 | Disabled / partial. See §17. |
+| ADS-B 1090 | Positions come from dump1090-fa or readsb if that decoder is running on **its own** dongle (`/run/dump1090-fa/aircraft.json`). This app does not decode Mode-S itself. |
+| ISS 145.800 FM voice / 145.825 APRS | Passes predicted from a cached Celestrak TLE (NORAD 25544) using skyfield and the node location. During a pass the monitor retunes here and records. |
+
+## 20. Plugin tools
+Each tool lives in `sdrgui/tools/<name>/` with a common `Tool` interface, an enable flag in `config.json` → `tools.<name>.enabled`, its own web panel, and unit tests.
+
+| Tool | Default | What it does |
+|---|---|---|
+| **classifier** | on | Labels detections from bandwidth, spectral flatness, envelope variance, FM instantaneous-frequency stats, and a simple cyclostationary hint. Accuracy unvalidated. |
+| **direction_finder** | off | Two dongles by serial. Phase interferometer + RSSI fallback. Accurate phase DF **requires a shared reference clock** and spacing ≤ λ/2. See [DIRECTION_FINDING.md](DIRECTION_FINDING.md). |
+| **scanner** | off | Hops configured bands in ~2 MHz slices, logs activity above an adaptive noise floor, records dwell/revisit timing. Default bands are the enabled target presets. |
+| **iq_recorder** | on | Manual or triggered raw IQ dump (`.cu8`, `.cf32`, `.complex16s`, `.npy`) plus a SigMF `.sigmf-meta` sidecar (freq, rate, time, GPS, gain), with a pre-trigger ring buffer and size limits. `.cu8` opens in Universal Radio Hacker. |
+
+## 21. Several dongles
+One V3 = one ~2.4 MHz slice at a time. Nearby watch frequencies share a slice; distant bands hop or need more dongles. A Pi 5 can usually run **3–4** dongles: ~250–300 mA each, plus up to ~180 mA if bias-tee is on; the Pi 5 USB budget is 600 mA by default and 1.6 A with a 5 A PSU and `usb_max_current_enable=1`. A powered hub is recommended. Set unique serials with `rtl_eeprom` and `device_serial` / DF `serial_b` in config. Full write-up: [MULTI_DONGLE.md](MULTI_DONGLE.md).

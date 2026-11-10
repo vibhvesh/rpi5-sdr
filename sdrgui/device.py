@@ -30,14 +30,20 @@ class Device:
     def open(self, cfg):
         self.close()
         if self.mock:
-            self.info = {"detected": True, "name": "MOCK RTL-SDR Blog V3", "tuner": "R820T2", "serial": "00000001"}
+            ser = str(cfg.get("device_serial") or "00000001")
+            self.info = {"detected": True, "name": "MOCK RTL-SDR Blog V3", "tuner": "R820T2", "serial": ser}
             return True
         if RtlSdr is None:
             self.error = "pyrtlsdr not installed"; return False
         last = ""
+        serial = cfg.get("device_serial") or None
         for attempt in range(4):
             try:
-                self.sdr = RtlSdr(); break
+                if serial:
+                    self.sdr = RtlSdr(serial_number=str(serial))
+                else:
+                    self.sdr = RtlSdr()
+                break
             except Exception as e:
                 last = str(e); self.sdr = None
                 if diag.dvb_loaded() or diag.busy_procs(): break
@@ -98,3 +104,11 @@ def compute_psd(x, nfft):
     x = x[: (len(x) // nfft) * nfft].reshape(-1, nfft) * np.hanning(nfft)
     p = np.mean(np.abs(np.fft.fftshift(np.fft.fft(x, axis=1), axes=1)) ** 2, axis=0)
     return 10 * np.log10(p / nfft + 1e-12)
+
+def list_serials():
+    if RtlSdr is None:
+        return []
+    try:
+        return [str(s) for s in RtlSdr.get_device_serial_addresses()]
+    except Exception:
+        return []

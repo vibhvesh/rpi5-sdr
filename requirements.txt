@@ -2,3 +2,7 @@ pyrtlsdr<0.3
 numpy
 pyqtgraph
 aiohttp
+paho-mqtt
+skyfield
+scipy
+gpsd-py3
