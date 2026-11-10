@@ -57,3 +57,5 @@ IQ recordings can be opened in [Universal Radio Hacker](https://github.com/jopoh
 
 ## Web dashboard
 `http://<pi-ip>:8080` — Live spectrum/waterfall, Watchlist, Analytics, Tools, Settings. Tune, presets, gain/sample rate/PPM, Home info and Doctor report remain on the Live tab. Runs as systemd service `rpi5-sdr-web` (disable: `sudo systemctl disable --now rpi5-sdr-web`). Only one program can own the dongle: while the desktop app is open the web page shows "Dongle in use by desktop app" (info still updates); otherwise the web service opens the dongle only while a page is connected. No password — LAN only; if `ufw` is active the installer opens 8080/tcp. Details: [User Manual §14](docs/USER_MANUAL.md#14-web-dashboard-view-from-another-pc-on-the-lan), [Install §10](docs/INSTALL.md#10-web-dashboard-service).
+
+- [SOP: SD card image creation and storage](docs/SOP_IMAGE_CREATION.md)
